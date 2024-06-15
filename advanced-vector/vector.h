@@ -117,9 +117,7 @@ public:
             this->Swap(temp);
         }
         else {
-            for (std::size_t i = 0; i < std::min(this->size_, other.size_); ++i) {
-                this->data_[i] = other.data_[i];
-            }
+            std::ranges::copy(other.begin(), other.begin() + std::min(this->size_, other.size_), this->begin());
 
             if (this->size_ > other.size_) {
                 std::destroy_n(this->data_ + other.size_, this->size_ - other.size_);
@@ -144,7 +142,6 @@ public:
     Vector& operator=(Vector&& other) noexcept {
         other.size_ = 0;
         this->data_ = std::move(other.data_);
-
         return *this;
     }
 
@@ -158,13 +155,22 @@ public:
 
     template <typename... Args>
     iterator Emplace(const_iterator pos, Args&&... args) {
-        return data_ + Embed(pos, std::forward<Args>(args)...);;
+        std::ptrdiff_t distance = std::ranges::distance(this->begin(), pos);
+
+        if (size_ == data_.Capacity()) {
+            ReallocateAndEmbed(distance, std::forward<Args>(args)...);
+        }
+        else {
+            Embed(pos, distance, std::forward<Args>(args)...);
+        }
+
+        ++size_;
+        return data_ + distance;
     }
 
     template <typename... Args>
     T& EmplaceBack(Args&&... args) {
-        Append(std::forward<Args>(args)...);
-        return *(data_ + (size_ - 1));
+        return *(Emplace(this->cend(), std::forward<Args>(args)...));
     }
 
     iterator Erase(const_iterator pos) noexcept {
@@ -177,11 +183,11 @@ public:
     }
 
     iterator Insert(const_iterator pos, const T& value) {
-        return data_ + Embed(pos, value);
+        return Emplace(pos, value);
     }
 
     iterator Insert(const_iterator pos, T&& value) {
-        return data_ + Embed(pos, std::move(value));
+        return Emplace(pos, std::move(value));
     }
 
     void PopBack() noexcept {
@@ -189,11 +195,11 @@ public:
     }
 
     void PushBack(const T& value) {
-        Append(value);
+        EmplaceBack(value);
     }
 
     void PushBack(T&& value) {
-        Append(std::move(value));
+        EmplaceBack(std::move(value));
     }
 
     void Reserve(std::size_t capacity) {
@@ -284,63 +290,35 @@ public:
 
 private:
     template <class... Args>
-    void Append(Args&&... args) {
-        if (size_ == data_.Capacity()) {
-            RawMemory<T> new_data(size_ == 0 ? 1 : size_ * 2);
-            std::construct_at(new_data + size_, std::forward<Args>(args)...);
+    void ReallocateAndEmbed(std::ptrdiff_t distance, Args&&... args) {
+        RawMemory<T> new_data(size_ == 0 ? 1 : size_ * 2);
+        std::construct_at(new_data + distance, std::forward<Args>(args)...);
 
-            if constexpr (std::is_nothrow_move_constructible_v<T> || !std::is_copy_constructible_v<T>) {
-                std::uninitialized_move_n(data_.GetAddress(), size_, new_data.GetAddress());
-            }
-            else {
-                std::uninitialized_copy_n(data_.GetAddress(), size_, new_data.GetAddress());
-            }
-
-            std::destroy_n(data_.GetAddress(), size_);
-            data_.Swap(new_data);
+        if constexpr (std::is_nothrow_move_constructible_v<T> || !std::is_copy_constructible_v<T>) {
+            std::uninitialized_move_n(data_.GetAddress(), distance, new_data.GetAddress());
+            std::uninitialized_move_n(data_ + distance, size_ - distance, new_data + distance + 1);
         }
         else {
-            std::construct_at(data_ + size_, std::forward<Args>(args)...);
+            std::uninitialized_copy_n(data_.GetAddress(), distance, new_data.GetAddress());
+            std::uninitialized_copy_n(data_ + distance, size_ - distance, new_data + distance + 1);
         }
 
-        ++size_;
+        std::destroy_n(data_.GetAddress(), size_);
+        data_.Swap(new_data);
     }
 
     template <class... Args>
-    std::ptrdiff_t Embed(const_iterator pos, Args&&... args) {
-        std::ptrdiff_t distance = std::ranges::distance(this->begin(), pos);
-
-        if (size_ == data_.Capacity()) {
-            RawMemory<T> new_data(size_ == 0 ? 1 : size_ * 2);
-            std::construct_at(new_data + distance, std::forward<Args>(args)...);
-
-            if constexpr (std::is_nothrow_move_constructible_v<T> || !std::is_copy_constructible_v<T>) {
-                std::uninitialized_move_n(data_.GetAddress(), distance, new_data.GetAddress());
-                std::uninitialized_move_n(data_ + distance, size_ - distance, new_data + distance + 1);
-            }
-            else {
-                std::uninitialized_copy_n(data_.GetAddress(), distance, new_data.GetAddress());
-                std::uninitialized_copy_n(data_ + distance, size_ - distance, new_data + distance + 1);
-            }
-
-            std::destroy_n(data_.GetAddress(), size_);
-            data_.Swap(new_data);
+    void Embed(const_iterator pos, std::ptrdiff_t distance, Args&&... args) {
+        if (pos == this->end()) {
+            std::construct_at(this->end(), std::forward<Args>(args)...);
         }
         else {
-            if (pos == this->end()) {
-                std::construct_at(this->end(), std::forward<Args>(args)...);
-            }
-            else {
-                T arg(std::forward<Args>(args)...);
-                std::construct_at(this->end(), std::move(*(this->end() - 1)));
+            T arg(std::forward<Args>(args)...);
+            std::construct_at(this->end(), std::move(*(this->end() - 1)));
 
-                std::ranges::move_backward(this->begin() + distance, this->end() - 1, this->end());
-                *(data_ + distance) = std::move(arg);
-            }
+            std::ranges::move_backward(this->begin() + distance, this->end() - 1, this->end());
+            *(data_ + distance) = std::move(arg);
         }
-
-        ++size_;
-        return distance;
     }
 
     RawMemory<T> data_;
