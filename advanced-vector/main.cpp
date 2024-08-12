@@ -6,26 +6,27 @@
 #include <vector>
 
 namespace {
-
-    // "Магическое" число, используемое для отслеживания живости объекта
     inline const uint32_t DEFAULT_COOKIE = 0xdeadbeef;
 
-    struct TestObj {
+    struct TestObj final {
         TestObj() = default;
         TestObj(const TestObj& other) = default;
         TestObj& operator=(const TestObj& other) = default;
         TestObj(TestObj&& other) = default;
         TestObj& operator=(TestObj&& other) = default;
+
         ~TestObj() {
             cookie = 0;
         }
+
         [[nodiscard]] bool IsAlive() const noexcept {
             return cookie == DEFAULT_COOKIE;
         }
+
         uint32_t cookie = DEFAULT_COOKIE;
     };
 
-    struct Obj {
+    struct Obj final {
         Obj() {
             if (default_construction_throw_countdown > 0) {
                 if (--default_construction_throw_countdown == 0) {
@@ -36,21 +37,21 @@ namespace {
         }
 
         explicit Obj(int id)
-            : id(id)  //
-        {
+            : id(id) {
+
             ++num_constructed_with_id;
         }
 
         Obj(int id, std::string name)
             : id(id)
-            , name(std::move(name))  //
-        {
+            , name(std::move(name)) {
+
             ++num_constructed_with_id_and_name;
         }
 
         Obj(const Obj& other)
-            : id(other.id)  //
-        {
+            : id(other.id) {
+
             if (other.throw_on_copy) {
                 throw std::runtime_error("Oops");
             }
@@ -58,8 +59,8 @@ namespace {
         }
 
         Obj(Obj&& other) noexcept
-            : id(other.id)  //
-        {
+            : id(other.id) {
+
             ++num_moved;
         }
 
@@ -69,6 +70,7 @@ namespace {
                 name = other.name;
                 ++num_assigned;
             }
+
             return *this;
         }
 
@@ -76,6 +78,7 @@ namespace {
             id = other.id;
             name = std::move(other.name);
             ++num_move_assigned;
+
             return *this;
         }
 
@@ -115,14 +118,14 @@ namespace {
         static inline int num_assigned = 0;
         static inline int num_move_assigned = 0;
     };
-
-}  // namespace
+} // unnamed namespace
 
 void Test1() {
     Obj::ResetCounters();
     const size_t SIZE = 100500;
     const size_t INDEX = 10;
     const int MAGIC = 42;
+
     {
         Vector<int> v;
         assert(v.Capacity() == 0);
@@ -229,6 +232,7 @@ void Test3() {
     const size_t MEDIUM_SIZE = 100;
     const size_t LARGE_SIZE = 250;
     const int ID = 42;
+
     {
         Obj::ResetCounters();
         Vector<int> v(MEDIUM_SIZE);
@@ -300,6 +304,7 @@ void Test3() {
 void Test4() {
     const size_t ID = 42;
     const size_t SIZE = 100'500;
+
     {
         Obj::ResetCounters();
         Vector<Obj> v;
@@ -359,8 +364,7 @@ void Test4() {
     {
         Vector<TestObj> v(1);
         assert(v.Size() == v.Capacity());
-        // Операция PushBack существующего элемента вектора должна быть безопасна
-        // даже при реаллокации памяти
+        // secure reallocation
         v.PushBack(v[0]);
         assert(v[0].IsAlive());
         assert(v[1].IsAlive());
@@ -368,8 +372,7 @@ void Test4() {
     {
         Vector<TestObj> v(1);
         assert(v.Size() == v.Capacity());
-        // Операция PushBack для перемещения существующего элемента вектора должна быть безопасна
-        // даже при реаллокации памяти
+        // secure reallocation
         v.PushBack(std::move(v[0]));
         assert(v[0].IsAlive());
         assert(v[1].IsAlive());
@@ -395,8 +398,7 @@ void Test5() {
     {
         Vector<TestObj> v(1);
         assert(v.Size() == v.Capacity());
-        // Операция EmplaceBack существующего элемента вектора должна быть безопасна
-        // даже при реаллокации памяти
+        // secure reallocation when EmplaceBack() is being used
         v.EmplaceBack(v[0]);
         assert(v[0].IsAlive());
         assert(v[1].IsAlive());
@@ -563,26 +565,31 @@ void Test6() {
     }
 }
 
-struct C {
+struct C final {
     C() noexcept {
         ++def_ctor;
     }
+
     C(const C& /*other*/) noexcept {
         ++copy_ctor;
     }
+
     C(C&& /*other*/) noexcept {
         ++move_ctor;
     }
+
     C& operator=(const C& other) noexcept {
         if (this != &other) {
             ++copy_assign;
         }
         return *this;
     }
+
     C& operator=(C&& /*other*/) noexcept {
         ++move_assign;
         return *this;
     }
+
     ~C() {
         ++dtor;
     }
@@ -606,11 +613,11 @@ struct C {
 
 void Dump() {
     using namespace std;
-    cerr << "Def ctors: "sv << C::def_ctor              //
-        << ", Copy ctors: "sv << C::copy_ctor          //
-        << ", Move ctors: "sv << C::move_ctor          //
-        << ", Copy assignments: "sv << C::copy_assign  //
-        << ", Move assignments: "sv << C::move_assign  //
+    cerr << "Def ctors: "sv << C::def_ctor
+        << ", Copy ctors: "sv << C::copy_ctor
+        << ", Move ctors: "sv << C::move_ctor
+        << ", Copy assignments: "sv << C::copy_assign
+        << ", Move assignments: "sv << C::move_assign
         << ", Dtors: "sv << C::dtor << endl;
 }
 
@@ -630,6 +637,7 @@ void Benchmark() {
     }
     catch (...) {
     }
+
     try {
         const size_t NUM = 10;
         C c;

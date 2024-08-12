@@ -11,7 +11,7 @@
 #include <utility>
 
 template <typename T>
-class RawMemory {
+class RawMemory final {
 public:
     RawMemory() noexcept = default;
     RawMemory(const RawMemory& other) = delete;
